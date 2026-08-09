@@ -45,7 +45,7 @@ jobs:
         run: |
           echo "======== 检查并补全初始环境 ========"
           
-          # 检查本地是否有 tools/tvbox.py，若没有则从上游自动补全（针对新库初始化）
+          # 检查本地是否有 tools/tvbox.py，若没有则从上游自动补全
           if [ ! -f "main_repo/tools/tvbox.py" ]; then
             echo "[初始化] 检查到本地缺少 tools/tvbox.py，正在从上游 qist/tvbox 复制初始文件..."
             mkdir -p main_repo/tools
@@ -55,9 +55,8 @@ jobs:
           fi
 
           echo "======== 开始从 qist/tvbox 增量同步文件 ========"
-          echo "[信息] 执行文件覆盖，并开启特有目录与脚本保护策略..."
           
-          # 执行 rsync 操作，排除不需要或自定义的项目
+          # 执行 rsync 操作，同步上游资源并保留本地特有目录
           rsync -av \
             --exclude='.git' \
             --exclude='.github' \
@@ -67,18 +66,31 @@ jobs:
             
           echo "======== 上游仓库同步完毕 ========"
 
-      - name: 6. 运行本地 JSON 接口加密脚本
+      - name: 6. 运行本地加密脚本并生成 .txt 副本，恢复原 .json
         run: |
           echo "======== 开始运行 JSON 文件加密逻辑 ========"
           cd main_repo
           if [ -f "scripts/sync_and_encrypt.py" ]; then
+            # 1. 正常运行原有的加密脚本（会原地覆盖 .json 文件）
             python scripts/sync_and_encrypt.py
+            
+            echo "======== 开始处理文件副本与恢复原 .json ========"
+            # 2. 将加密后的文件备份成 .txt 扩展名副本
+            [ -f "fty.json" ] && cp fty.json fty.txt && echo "[副本] 已生成 fty.txt"
+            [ -f "jsm.json" ] && cp jsm.json jsm.txt && echo "[副本] 已生成 jsm.txt"
+            [ -f "xiaosa/api.json" ] && cp xiaosa/api.json xiaosa/api.txt && echo "[副本] 已生成 xiaosa/api.txt"
+
+            # 3. 从上游拉取的内容（qist_repo）中把未加密的原 .json 重新复制覆盖回来
+            cd ..
+            [ -f "qist_repo/fty.json" ] && cp qist_repo/fty.json main_repo/fty.json && echo "[恢复] 已还原原文件 fty.json"
+            [ -f "qist_repo/jsm.json" ] && cp qist_repo/jsm.json main_repo/jsm.json && echo "[恢复] 已还原原文件 jsm.json"
+            [ -f "qist_repo/xiaosa/api.json" ] && cp qist_repo/xiaosa/api.json main_repo/xiaosa/api.json && echo "[恢复] 已还原原文件 xiaosa/api.json"
           else
-            echo "[警告] 未找到 scripts/sync_and_encrypt.py 脚本，请检查新仓库是否已放入该脚本！"
+            echo "[警告] 未找到 scripts/sync_and_encrypt.py 脚本！"
             exit 1
           fi
 
-      - name: 7. 提交并推送加密后的内容至 GitHub
+      - name: 7. 提交并推送原文件与加密副本至 GitHub
         run: |
           cd main_repo
           echo "======== 开始检查文件变动并准备提交 ========"
@@ -87,7 +99,7 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 暂存所有同步更新及加密后的变动文件
+          # 暂存所有同步更新（包含原 json 文件及新生成的 .txt 加密副本）
           git add .
           
           # 详细打印被改动的文件列表
@@ -100,7 +112,7 @@ jobs:
           else
             LOG_TIME=$(date +'%Y-%m-%d %H:%M:%S')
             echo "[信息] 检查到文件存在更新，准备提交代码，时间标志: ${LOG_TIME}"
-            git commit -m "Auto: 全量同步 qist/tvbox 并完成本地 3 个 JSON 文件加密 [${LOG_TIME}]"
+            git commit -m "Auto: 全量同步 qist/tvbox 并保留原文件同时生成 .txt 加密副本 [${LOG_TIME}]"
             git push
             echo "======== 成功推送到 GitHub 远程仓库 ========"
           fi
