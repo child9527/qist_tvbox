@@ -1,0 +1,84 @@
+name: 自动同步 Qist TVBox 仓库并加密配置文件
+
+on:
+  schedule:
+    # 每天 UTC 0:00 (北京时间 15:00) 自动触发
+    - cron: '0 7 * * *'
+  workflow_dispatch: # 支持在 GitHub 界面手动点击按钮立即触发
+
+jobs:
+  sync-and-encrypt:
+    name: 同步与加密任务
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. 拉取当前用户仓库 (主仓库)
+        uses: actions/checkout@v4
+        with:
+          path: main_repo
+
+      - name: 2. 拉取 upstream 上游仓库 (qist/tvbox)
+        uses: actions/checkout@v4
+        with:
+          repository: 'qist/tvbox'
+          path: qist_repo
+
+      - name: 3. 初始化 Python 运行环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 4. 安装 Python AES 加密依赖库
+        run: |
+          echo "======== 开始安装 Python 依赖库 ========"
+          python -m pip install --upgrade pip
+          pip install pycryptodome
+          echo "======== 依赖库安装完成 ========"
+
+      - name: 5. 执行 rsync 增量同步 (带保护隔离)
+        run: |
+          echo "======== 开始从 qist/tvbox 增量同步文件 ========"
+          echo "[信息] 执行文件覆盖，并开启特有目录保护策略..."
+          
+          # 执行 rsync 操作，并输出中文提示
+          rsync -av \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='scripts' \
+            --exclude='tools/tvbox.py' \
+            qist_repo/ main_repo/
+            
+          echo "======== 上游仓库同步完毕 ========"
+
+      - name: 6. 运行本地 JSON 接口加密脚本
+        run: |
+          echo "======== 开始运行 JSON 文件加密逻辑 ========"
+          cd main_repo
+          python scripts/sync_and_encrypt.py
+
+      - name: 7. 提交并推送加密后的内容至 GitHub
+        run: |
+          cd main_repo
+          echo "======== 开始检查文件变动并准备提交 ========"
+          
+          # 配置 Git 提交身份信息
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # 暂存所有同步更新及加密后的变动文件
+          git add .
+          
+          # 详细打印被改动的文件列表，便于查阅日志
+          echo "[日志] 当前被修改或新增的文件列表如下："
+          git status --short
+          
+          # 检查是否有文件改动
+          if git diff --staged --quiet; then
+            echo "[提示] 经对比，本地仓库与上游内容完全一致且无任何文件变更，跳过本次 Commit 提交。"
+          else
+            LOG_TIME=$(date +'%Y-%m-%d %H:%M:%S')
+            echo "[信息] 检查到文件存在更新，准备提交代码，时间标志: ${LOG_TIME}"
+            git commit -m "Auto: 全量同步 qist/tvbox 并完成本地 3 个 JSON 文件加密 [${LOG_TIME}]"
+            git push
+            echo "======== 成功推送到 GitHub 远程仓库 ========"
+          fi
