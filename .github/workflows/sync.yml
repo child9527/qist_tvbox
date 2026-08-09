@@ -19,6 +19,11 @@ jobs:
           path: main_repo
           fetch-depth: 1
 
+      - name: 安装 jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
       - name: 2. 获取 upstream 最新 commit 信息（不拉历史）
         run: |
           UPSTREAM_COMMIT=$(curl -s https://api.github.com/repos/qist/tvbox/commits/main | jq -r '.commit.message')
