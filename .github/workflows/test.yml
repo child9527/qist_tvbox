@@ -24,3 +24,12 @@ jobs:
       - name: 执行加密脚本
         run: |
           python scripts/sync_and_encrypt.py
+
+      - name: 提交并推送加密后的文件到仓库
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add fty.txt jsmbak.json xiaosa/api.txt
+          # 检查是否有变更，有变更才提交，避免报错
+          git diff --staged --quiet || git commit -m "auto: 自动更新加密文件 [skip ci]"
+          git push
