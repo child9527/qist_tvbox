@@ -26,8 +26,10 @@ jobs:
 
       - name: 2. 获取 upstream 最新 commit 信息（不拉历史）
         run: |
-          UPSTREAM_COMMIT=$(curl -s https://api.github.com/repos/qist/tvbox/commits/main | jq -r '.commit.message')
-          UPSTREAM_TIME=$(curl -s https://api.github.com/repos/qist/tvbox/commits/main | jq -r '.commit.committer.date')
+          API_JSON=$(curl -s https://api.github.com/repos/qist/tvbox/commits/main)
+
+          UPSTREAM_COMMIT=$(echo "$API_JSON" | jq -r '.commit.message')
+          UPSTREAM_TIME=$(echo "$API_JSON" | jq -r '.commit.committer.date // .commit.author.date')
           echo "UPSTREAM_COMMIT=$UPSTREAM_COMMIT" >> $GITHUB_ENV
           echo "UPSTREAM_TIME=$UPSTREAM_TIME" >> $GITHUB_ENV
 
