@@ -6,22 +6,28 @@ on:
     - cron: '0 7 * * *'
   workflow_dispatch: # 支持在 GitHub 界面手动点击按钮立即触发
 
+# 显式赋予 GitHub Actions 写入仓库的权限
+permissions:
+  contents: write
+
 jobs:
   sync-and-encrypt:
     name: 同步与加密任务
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. 拉取当前用户仓库 (主仓库)
+      - name: 1. 拉取当前用户仓库 (主仓库 - 仅拉取最新一层，防止体积膨胀)
         uses: actions/checkout@v4
         with:
           path: main_repo
+          fetch-depth: 1 # 只拉取最新 Commit，杜绝历史体积膨胀
 
-      - name: 2. 拉取 upstream 上游仓库 (qist/tvbox)
+      - name: 2. 拉取 upstream 上游仓库 (qist/tvbox - 仅拉取最新一层)
         uses: actions/checkout@v4
         with:
           repository: 'qist/tvbox'
           path: qist_repo
+          fetch-depth: 1 # 仅拉取最新代码
 
       - name: 3. 初始化 Python 运行环境
         uses: actions/setup-python@v5
@@ -35,12 +41,23 @@ jobs:
           pip install pycryptodome
           echo "======== 依赖库安装完成 ========"
 
-      - name: 5. 执行 rsync 增量同步 (带保护隔离)
+      - name: 5. 自动补全缺失文件并执行 rsync 增量同步
         run: |
-          echo "======== 开始从 qist/tvbox 增量同步文件 ========"
-          echo "[信息] 执行文件覆盖，并开启特有目录保护策略..."
+          echo "======== 检查并补全初始环境 ========"
           
-          # 执行 rsync 操作，并输出中文提示
+          # 检查本地是否有 tools/tvbox.py，若没有则从上游自动补全（针对新库初始化）
+          if [ ! -f "main_repo/tools/tvbox.py" ]; then
+            echo "[初始化] 检查到本地缺少 tools/tvbox.py，正在从上游 qist/tvbox 复制初始文件..."
+            mkdir -p main_repo/tools
+            cp qist_repo/tools/tvbox.py main_repo/tools/tvbox.py
+          else
+            echo "[跳过] 本地已存在 tools/tvbox.py，将保留本地版本。"
+          fi
+
+          echo "======== 开始从 qist/tvbox 增量同步文件 ========"
+          echo "[信息] 执行文件覆盖，并开启特有目录与脚本保护策略..."
+          
+          # 执行 rsync 操作，排除不需要或自定义的项目
           rsync -av \
             --exclude='.git' \
             --exclude='.github' \
@@ -54,7 +71,12 @@ jobs:
         run: |
           echo "======== 开始运行 JSON 文件加密逻辑 ========"
           cd main_repo
-          python scripts/sync_and_encrypt.py
+          if [ -f "scripts/sync_and_encrypt.py" ]; then
+            python scripts/sync_and_encrypt.py
+          else
+            echo "[警告] 未找到 scripts/sync_and_encrypt.py 脚本，请检查新仓库是否已放入该脚本！"
+            exit 1
+          fi
 
       - name: 7. 提交并推送加密后的内容至 GitHub
         run: |
@@ -68,7 +90,7 @@ jobs:
           # 暂存所有同步更新及加密后的变动文件
           git add .
           
-          # 详细打印被改动的文件列表，便于查阅日志
+          # 详细打印被改动的文件列表
           echo "[日志] 当前被修改或新增的文件列表如下："
           git status --short
           
