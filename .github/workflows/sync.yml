@@ -27,11 +27,15 @@ jobs:
       - name: 2. 获取 upstream 最新 commit 信息（不拉历史）
         run: |
           API_JSON=$(curl -s https://api.github.com/repos/qist/tvbox/commits/main)
-
           UPSTREAM_COMMIT=$(echo "$API_JSON" | jq -r '.commit.message')
-          UPSTREAM_TIME=$(echo "$API_JSON" | jq -r '.commit.committer.date // .commit.author.date')
+          # 尝试获取 committer.date 或 author.date
+          RAW_TIME=$(echo "$API_JSON" | jq -r '.commit.committer.date // .commit.author.date')
+          # 如果 RAW_TIME 是 null 或空字符串，则使用当前时间
+          if [ "$RAW_TIME" = "null" ] || [ -z "$RAW_TIME" ]; then
+            RAW_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          fi
           echo "UPSTREAM_COMMIT=$UPSTREAM_COMMIT" >> $GITHUB_ENV
-          echo "UPSTREAM_TIME=$UPSTREAM_TIME" >> $GITHUB_ENV
+          echo "UPSTREAM_TIME=$RAW_TIME" >> $GITHUB_ENV
 
       - name: 3. 拉取 upstream 最新文件（轻量）
         uses: actions/checkout@v4
@@ -81,6 +85,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "无更新，跳过提交"
           else
-            git commit --date="$UPSTREAM_TIME" -m "$UPSTREAM_COMMIT"
+            git commit -m "$UPSTREAM_COMMIT"
             git push
           fi
