@@ -1,102 +1,26 @@
-name: 测试解密 JSM 接口并对比文件差异
+name: Test Encrypt JSON
 
 on:
-  workflow_dispatch:
-
-# 显式声明 GitHub Actions 的写权限
-permissions:
-  contents: write
+  workflow_dispatch: # 支持在 GitHub Actions 页面手动点击按钮触发运行
 
 jobs:
-  test-decrypt-and-compare:
-    name: 测试解密与对比
+  run-encrypt:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. 拉取当前仓库
+      - name: 检出仓库代码
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
-      - name: 2. 初始化 Python 环境
+      - name: 设置 Python 环境
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 3. 安装解密所需依赖
+      - name: 安装加密算法依赖库
         run: |
           python -m pip install --upgrade pip
           pip install pycryptodome
 
-      - name: 4. 检查并补全 tools/tvbox.py
+      - name: 执行加密脚本
         run: |
-          if [ ! -f "tools/tvbox.py" ]; then
-            echo "[信息] 本地缺少 tools/tvbox.py，正在从上游 qist/tvbox 下载..."
-            mkdir -p tools
-            curl -sS -o tools/tvbox.py https://raw.githubusercontent.com/qist/tvbox/main/tools/tvbox.py
-          fi
-
-      - name: 5. 下载远程 jsm.txt 加密副本
-        run: |
-          echo "======== 开始下载 jsm.txt ========"
-          curl -sS -o jsm.txt "https://raw.githubusercontent.com/child9527/qist_tvbox/refs/heads/main/jsm.txt"
-          
-          if [ -s "jsm.txt" ]; then
-            echo "[成功] 已成功下载 jsm.txt，文件大小: $(stat -c%s jsm.txt) 字节"
-          else
-            echo "[错误] 下载 jsm.txt 失败或文件为空！"
-            exit 1
-          fi
-
-      - name: 6. 调用 tvbox.py 执行解密生成 jsm.bin
-        run: |
-          echo "======== 开始执行解密操作 (dec) ========"
-          # 执行解密命令：python tools/tvbox.py <输入文件> <输出文件> dec
-          python tools/tvbox.py jsm.txt jsm.bin dec
-
-          if [ -f "jsm.bin" ]; then
-            echo "[成功] 已成功解密生成 jsm.bin，文件大小: $(stat -c%s jsm.bin) 字节"
-          else
-            echo "[错误] 解密失败，未生成 jsm.bin！"
-            exit 1
-          fi
-
-      - name: 7. 对比 jsm.json 与 jsm.bin 的差异
-        run: |
-          echo "=================================================="
-          echo "             文件对比分析 (jsm.json vs jsm.bin)     "
-          echo "=================================================="
-
-          if [ ! -f "jsm.json" ]; then
-            echo "[提示] 当前仓库根目录未找到 jsm.json，正在从远程同步下载 jsm.json 进行对比..."
-            curl -sS -o jsm.json "https://raw.githubusercontent.com/child9527/qist_tvbox/refs/heads/main/jsm.json"
-          fi
-
-          echo "[信息] jsm.json 大小: $(stat -c%s jsm.json) 字节"
-          echo "[信息] jsm.bin  大小: $(stat -c%s jsm.bin) 字节"
-          echo "--------------------------------------------------"
-
-          # 使用 diff 命令对比两个文件
-          if diff -q jsm.json jsm.bin > /dev/null; then
-            echo "✅ 【完全一致】：解密后的 jsm.bin 与原 jsm.json 内容 100% 相同！"
-          else
-            echo "❌ 【存在差异】：解密后的 jsm.bin 与原 jsm.json 内容不一致！"
-            echo "------------------- 详细差异如下 -------------------"
-            diff -u jsm.json jsm.bin | head -n 30 || true
-            echo "----------------------------------------------------"
-          fi
-
-      - name: 8. 提交并保存 jsm.bin 到仓库 (可选)
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          
-          git add jsm.bin
-          
-          if git diff --staged --quiet; then
-            echo "[提示] jsm.bin 没有变动，无需提交。"
-          else
-            git commit -m "Test: 自动生成解密文件 jsm.bin"
-            git push
-            echo "======== 已将 jsm.bin 推送到 GitHub 仓库 ========"
-          fi
+          python sync_and_encrypt.py
