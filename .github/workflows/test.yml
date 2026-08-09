@@ -23,4 +23,4 @@ jobs:
 
       - name: 执行加密脚本
         run: |
-          python sync_and_encrypt.py
+          python scripts/sync_and_encrypt.py
