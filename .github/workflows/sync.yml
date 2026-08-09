@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-and-sync:
-    name: 执行 Qist 官方构建流程
+    name: 同步 Qist/TVBox 仓库并生成加密文件
     runs-on: ubuntu-latest
 
     steps:
@@ -35,44 +35,17 @@ jobs:
       - name: 4. 安装官方依赖库
         run: |
           python -m pip install --upgrade pip
-          pip install demjson3 pycryptodome requests
+          pip install pycryptodome
 
-      - name: 5. 按照 upstream 的流程处理 xiaosa 与 fty 接口
+      - name: 5. 同步产物到主仓库
         run: |
-          echo "======== 1. 处理 xiaosa (包含 jsm.json) ========"
-          cd qist_repo/tools
-          
-          # 解密上游 one.json 并做本地化处理
-          python tvbox.py https://9877.kstore.space/one.json xs.json dec
-          python build_local.py xs.json output
-          mkdir -p ../xiaosa
-          \cp -pdr output/* ../xiaosa/
-          
-          # 运行 xiao.py 和合并脚本生成完整版 jsm.json 与 dianshi.json
-          python xiao.py ../xiaosa/api.json dianshi.json
-          python xiao.py ../xiaosa/api.json jsm.json
-          python copy_xbpq.py dianshi_with_app_sites.json
-          
-          # 覆盖输出到根目录
-          \cp -pdr dianshi_with_app_sites.json ../dianshi.json
-          \cp -pdr jsm_with_app_sites.json ../jsm.json
-          mkdir -p ../jar
-          \cp -pdr ../xiaosa/spider.jar ../jar/spider.jar
-          
-          echo "======== 2. 处理 fty (fty.json) ========"
-          python tvbox.py https://www.xn--sss604efuw.net/tv ty.json dec
-          python fty.py ty.json
-          \cp -pdr tvbox_cleaned.json ../fty.json
-          \cp -pdr fan.txt ../jar/fan.txt
-          
-          echo "======== 3. 同步产物到主仓库 ========"
-          cd ../..
           rsync -av \
             --exclude='.git' \
             --exclude='.github' \
+            --exclude='tools/tvbox.py' \
             qist_repo/ main_repo/
 
-      - name: 6. 额外生成加密副本 .txt (如需保存加密版)
+      - name: 6. 额外生成加密副本 xxx.txt 
         run: |
           cd main_repo
           # 对最终合成好的完整 json 文件进行加密生成 .txt 副本
@@ -94,7 +67,7 @@ jobs:
             echo "[提示] 没有文件更新，跳过 Commit。"
           else
             LOG_TIME=$(date +'%Y-%m-%d %H:%M:%S')
-            git commit -m "Auto: 按照 Qist 流程完整同步并构建接口 [${LOG_TIME}]"
+            git commit -m "Auto: 同步 qist/tvbox仓库内容，并生成加密文件 [${LOG_TIME}]"
             git push
-            echo "======== 成功推送到 GitHub 远程仓库 ========"
+            echo "======== 成功同步 qist/tvbox 仓库内容 ========"
           fi
