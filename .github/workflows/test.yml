@@ -3,6 +3,7 @@ name: 测试解密 JSM 接口并对比文件差异
 on:
   workflow_dispatch:
 
+# 显式声明 GitHub Actions 的写权限
 permissions:
   contents: write
 
@@ -50,6 +51,7 @@ jobs:
       - name: 6. 调用 tvbox.py 执行解密生成 jsm.bin
         run: |
           echo "======== 开始执行解密操作 (dec) ========"
+          # 执行解密命令：python tools/tvbox.py <输入文件> <输出文件> dec
           python tools/tvbox.py jsm.txt jsm.bin dec
 
           if [ -f "jsm.bin" ]; then
@@ -66,7 +68,7 @@ jobs:
           echo "=================================================="
 
           if [ ! -f "jsm.json" ]; then
-            echo "[提示] 当前仓库根目录未找到 jsm.json，正在从远程同步下载..."
+            echo "[提示] 当前仓库根目录未找到 jsm.json，正在从远程同步下载 jsm.json 进行对比..."
             curl -sS -o jsm.json "https://raw.githubusercontent.com/child9527/qist_tvbox/refs/heads/main/jsm.json"
           fi
 
@@ -74,23 +76,15 @@ jobs:
           echo "[信息] jsm.bin  大小: $(stat -c%s jsm.bin) 字节"
           echo "--------------------------------------------------"
 
-          python3 -c "
-import json, sys
-
-try:
-    with open('jsm.json', 'r', encoding='utf-8') as f1, open('jsm.bin', 'r', encoding='utf-8') as f2:
-        d1 = json.load(f1)
-        d2 = json.load(f2)
-        if d1 == d2:
-            print('SUCCESS: JSON 数据结构 100% 一致！')
-            sys.exit(0)
-        else:
-            print('ERROR: JSON 数据内容不一致！')
-            sys.exit(1)
-except Exception as e:
-    print('ERROR: JSON 解析时发生错误:', e)
-    sys.exit(1)
-"
+          # 使用 diff 命令对比两个文件
+          if diff -q jsm.json jsm.bin > /dev/null; then
+            echo "✅ 【完全一致】：解密后的 jsm.bin 与原 jsm.json 内容 100% 相同！"
+          else
+            echo "❌ 【存在差异】：解密后的 jsm.bin 与原 jsm.json 内容不一致！"
+            echo "------------------- 详细差异如下 -------------------"
+            diff -u jsm.json jsm.bin | head -n 30 || true
+            echo "----------------------------------------------------"
+          fi
 
       - name: 8. 提交并保存 jsm.bin 到仓库 (可选)
         run: |
