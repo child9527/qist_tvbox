@@ -7,7 +7,7 @@ from pathlib import Path
 # 定义加密配置：(源 JSON 文件, 导出密文文件)
 TARGET_FILES_TO_ENCRYPT = [
     ("fty.json", "fty.txt"),
-    ("jsm.json", "jsmbak.json"),
+    ("jsm.json", "jsm.txt"),
     ("xiaosa/api.json", "xiaosa/api.txt"),
 ]
 
