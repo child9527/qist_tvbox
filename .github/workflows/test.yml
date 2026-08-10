@@ -29,7 +29,7 @@ jobs:
       - name: 解密 jsm.txt 为 jsm.bin
         run: |
           cd main_repo
-
+          python tvbox.py https://9877.kstore.space/one.json xs.json dec
           if [ -f "jsm.txt" ]; then
             python tools/tvbox.py jsm.txt jsm.bin dec
           else
