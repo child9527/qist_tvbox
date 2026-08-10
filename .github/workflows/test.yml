@@ -1,50 +1,65 @@
-name: 测试解密jsm.txt
+name: 执行 JSON 加解密验证
 
 on:
+  schedule:
+    - cron: '0 7 * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  run-dec:
+  encrypt-decrypt-test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 拉取仓库
+      - name: 1. 拉取当前仓库
         uses: actions/checkout@v4
 
-      - name: 安装 Python
+      - name: 2. 初始化 Python 环境
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: '3.10'
 
-      - name: 安装 tvbox.py 依赖
+      - name: 3. 安装依赖库
         run: |
           python -m pip install --upgrade pip
           pip install pycryptodome
 
-      - name: 下载 one.json
+      - name: 4. 执行多重加解密流程
         run: |
-          curl -L -o one.json https://9877.kstore.space/one.json
+          files=("jsm.json" "fty.json" "xiaosa/api.json")
 
-      - name: 解密 one.json → xs.json
-        run: |
-          python tools/tvbox.py one.json xs.json dec
-
-      - name: 解密 jsm.txt → jsm.bin
-        run: |
-          if [ -f "jsm.txt" ]; then
-            python tools/tvbox.py jsm.txt jsm.bin dec
+          if [ -f "tools/tvbox.py" ]; then
+            for file in "${files[@]}"; do
+              if [ -f "$file" ]; then
+                base="${file%.json}"
+                
+                # 1. 原始 json 加密生成 _enc1.txt
+                python tools/tvbox.py "$file" "${base}_enc1.txt" enc || true
+                
+                # 2. 将 _enc1.txt 解密生成 _dec1.txt
+                python tools/tvbox.py "${base}_enc1.txt" "${base}_dec1.txt" dec || true
+                
+                # 3. 再将 _dec1.txt 加密生成 _enc2.txt
+                python tools/tvbox.py "${base}_dec1.txt" "${base}_enc2.txt" enc || true
+              fi
+            done
           else
-            echo "未找到 jsm.txt，跳过解密"
+            echo "错误: 未找到 tools/tvbox.py 加密脚本"
+            exit 1
           fi
 
-      - name: 提交并推送解密后的文件到仓库
+      - name: 5. 提交生成的 txt 文件
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
-          git add xs.json jsm.bin
-          git diff --staged --quiet || git commit -m "auto: 已完成解密 xs.json 与 jsm.bin"
-          git push
+
+          git add .
+
+          if git diff --staged --quiet; then
+            echo "无文件变更，跳过提交"
+          else
+            git commit -m "chore: 生成加解密测试文件 (_enc1, _dec1, _enc2)"
+            git push
+          fi
