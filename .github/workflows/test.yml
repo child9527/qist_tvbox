@@ -29,8 +29,8 @@ jobs:
       - name: 4. 下载远程 one.json 并执行加解密流程
         run: |
           # 1. 从远程网盘下载 one.json 到仓库根目录
-          echo "正在从 https://9877.kstore.space/one.json 下载目标文件..."
-          curl -sSL "https://9877.kstore.space/one.json" -o "one.json"
+          echo "正在从 https://d.kstore.dev/download/2843/mtv6.txt 下载目标文件..."
+          curl -sSL "https://d.kstore.dev/download/2843/mtv6.txt" -o "mtv6.txt"
 
           if [ ! -f "one.json" ]; then
             echo "错误: 下载 one.json 失败！"
@@ -42,30 +42,11 @@ jobs:
             exit 1
           fi
 
-          # 2. 将 one.json 解密为 xs.json
-          echo "正在解密 one.json -> xs.json ..."
-          python tools/tvbox.py "one.json" "xs.json" dec || true
+          echo "正在加密 mtv6.txt -> mtv6.json ..."
+          python tools/tvbox.py "mtv6.txt" "mtv6.json" enc || true
 
-          # 3. 再将 xs.json 加密为 one1.json
-          echo "正在重新加密 xs.json -> one1.json ..."
-          python tools/tvbox.py "xs.json" "one1.json" enc || true
 
-      - name: 5. 比较 one.json 与 one1.json 内容差异
-        run: |
-          echo "==================== 比较结果 ===================="
-          if [ -f "one.json" ] && [ -f "one1.json" ]; then
-            if cmp -s "one.json" "one1.json"; then
-              echo "【无差异】原始密文 one.json 与 重新加密的 one1.json 内容完全一致！"
-            else
-              echo "【有差异】原始密文 one.json 与 重新加密的 one1.json 内容存在区别！"
-              echo "分析说明：这证实了原始 one.json 文本在解密为 xs.json 时，格式（如缩进、换行、特定空白字符或字段顺序）被重构或规范化了，导致二次加密后密文发生了改变。"
-            fi
-          else
-            echo "【报错】未成功找到 one.json 或 one1.json 文件"
-          fi
-          echo "=================================================="
-
-      - name: 6. 提交生成的 xs.json 与 one1.json
+      - name: 6. 提交
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -75,6 +56,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "无文件变更，跳过提交"
           else
-            git commit -m "chore: 自动下载 one.json 并生成 xs.json 和 one1.json 测试对比"
+            git commit -m "完成"
             git push
           fi
