@@ -50,7 +50,29 @@ jobs:
             exit 1
           fi
 
-      - name: 5. 提交生成的 txt 文件
+      - name: 5. 比较 enc1 与 enc2 内容差异
+        run: |
+          files=("jsm.json" "fty.json" "xiaosa/api.json")
+
+          echo "==================== 比较结果 ===================="
+          for file in "${files[@]}"; do
+            base="${file%.json}"
+            enc1="${base}_enc1.txt"
+            enc2="${base}_enc2.txt"
+
+            if [ -f "$enc1" ] && [ -f "$enc2" ]; then
+              if cmp -s "$enc1" "$enc2"; then
+                echo "【无差异】$enc1 与 $enc2 内容完全一致！"
+              else
+                echo "【有差异】$enc1 与 $enc2 内容存在区别！"
+              fi
+            else
+              echo "【跳过】未找到对应的对比文件: $enc1 或 $enc2"
+            fi
+          done
+          echo "=================================================="
+
+      - name: 6. 提交生成的 txt 文件
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -60,6 +82,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "无文件变更，跳过提交"
           else
-            git commit -m "chore: 生成加解密测试文件 (_enc1, _dec1, _enc2)"
+            git commit -m "chore: 生成加解密测试文件并对比日志"
             git push
           fi
