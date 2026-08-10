@@ -13,8 +13,6 @@ jobs:
     steps:
       - name: 拉取仓库
         uses: actions/checkout@v4
-        with:
-          path: main_repo
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -26,10 +24,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install pycryptodome
 
-      - name: 解密 jsm.txt 为 jsm.bin
+      - name: 下载 one.json
         run: |
-          cd main_repo
-          python tools/tvbox.py https://9877.kstore.space/one.json xs.json dec
+          curl -L -o one.json https://9877.kstore.space/one.json
+
+      - name: 解密 one.json → xs.json
+        run: |
+          python tools/tvbox.py one.json xs.json dec
+
+      - name: 解密 jsm.txt → jsm.bin
+        run: |
           if [ -f "jsm.txt" ]; then
             python tools/tvbox.py jsm.txt jsm.bin dec
           else
@@ -38,10 +42,9 @@ jobs:
 
       - name: 提交并推送解密后的文件到仓库
         run: |
-          cd main_repo
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          git add jsm.bin xs.json
-          git diff --staged --quiet || git commit -m "auto: 已完成 jsm.txt 解密"
+          git add xs.json jsm.bin
+          git diff --staged --quiet || git commit -m "auto: 已完成解密 xs.json 与 jsm.bin"
           git push
