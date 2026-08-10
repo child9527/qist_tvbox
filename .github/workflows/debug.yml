@@ -1,0 +1,95 @@
+name: 检测 jsm.json 加密与格式隐患
+
+on:
+  push:
+    paths:
+      - 'jsm.json'
+  workflow_dispatch:
+
+jobs:
+  check-and-diagnose:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. 拉取当前仓库
+        uses: actions/checkout@v4
+
+      - name: 2. 初始化 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 3. 安装依赖库
+        run: |
+          python -m pip install --upgrade pip
+          pip install pycryptodome
+
+      - name: 4. 执行物理字节检测与加解密闭环测试
+        run: |
+          python -c '
+          import os, sys
+
+          file_path = "jsm.json"
+          print(f"================ 开始物理字节检测: {file_path} ================")
+
+          if not os.path.exists(file_path):
+              print(f"❌ 错误：仓库根目录下未找到 {file_path} 文件！")
+              sys.exit(1)
+
+          # 1. 检查物理字节与 BOM 头
+          with open(file_path, "rb") as f:
+              raw_bytes = f.read()
+
+          print(f"1. 文件物理大小: {len(raw_bytes)} 字节")
+
+          # 检查 UTF-8 BOM (0xEF 0xBB 0xBF)
+          has_bom = raw_bytes.startswith(b"\xef\xbb\xbf")
+          if has_bom:
+              print("⚠️ 警告: 文件存在 UTF-8 BOM 头！这会直接导致加密后 TVBox 报 JSON Parse Error！")
+          else:
+              print("✅ 检查通过: 无 BOM 头")
+
+          # 2. 检查换行符格式
+          if b"\r\n" in raw_bytes:
+              print("⚠️ 提示: 文件包含 Windows 换行符 (CRLF \\r\\n)")
+          elif b"\n" in raw_bytes:
+              print("✅ 提示: 文件使用 Linux 换行符 (LF \\n)")
+
+          # 3. 模拟加密与解密闭环
+          print("\n2. 调用 tools/tvbox.py 执行加密与解密测试...")
+          temp_enc = "temp_jsm.txt"
+          temp_dec = "temp_jsm_dec.json"
+
+          # 运行加密
+          enc_res = os.system(f"python tools/tvbox.py \"{file_path}\" \"{temp_enc}\" enc")
+          if enc_res != 0 or not os.path.exists(temp_enc):
+              print("❌ 错误: 加密执行失败！请检查 tools/tvbox.py")
+              sys.exit(1)
+
+          # 运行解密
+          dec_res = os.system(f"python tools/tvbox.py \"{temp_enc}\" \"{temp_dec}\" dec")
+          if dec_res != 0 or not os.path.exists(temp_dec):
+              print("❌ 错误: 解密执行失败！请检查 tools/tvbox.py")
+              sys.exit(1)
+
+          # 比对解密后数据与原数据
+          with open(temp_dec, "rb") as f:
+              dec_bytes = f.read()
+
+          if dec_bytes == raw_bytes:
+              print("✅ 闭环验证完成: 原文件与【加密再解密】后的字节流 100% 一致。")
+          else:
+              print("❌ 警告: 解密后字节流与原文件存在差异！")
+              print(f"   原文件: {len(raw_bytes)} 字节 | 解密后: {len(dec_bytes)} 字节")
+              min_len = min(len(raw_bytes), len(dec_bytes))
+              for i in range(min_len):
+                  if raw_bytes[i] != dec_bytes[i]:
+                      print(f"   第 {i} 个字节不匹配: 原文件 0x{raw_bytes[i]:02X} -> 解密后 0x{dec_bytes[i]:02X}")
+                      break
+
+          # 清理产生的临时文件
+          if os.path.exists(temp_enc): os.remove(temp_enc)
+          if os.path.exists(temp_dec): os.remove(temp_dec)
+
+          print("========================================================")
+          '
