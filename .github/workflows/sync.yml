@@ -13,24 +13,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. 拉取当前仓库
+      - name: 拉取当前仓库
         uses: actions/checkout@v4
         with:
           path: main_repo
           fetch-depth: 1
 
-      - name: 2. 获取 upstream 最新 commit 信息
+      - name: 获取 upstream 最新 SHA
         run: |
-          API_JSON=$(curl -s https://api.github.com/repos/qist/tvbox/commits/main)
-          UPSTREAM_SHA=$(echo "$API_JSON" | jq -r '.sha')
-
+          UPSTREAM_SHA=$(curl -s https://api.github.com/repos/qist/tvbox/commits/main | sed -n 's/.*"sha": "\(.*\)".*/\1/p' | head -n 1)
           cd main_repo
           LOCAL_SHA=$(git rev-parse HEAD)
 
           echo "UPSTREAM_SHA=$UPSTREAM_SHA" >> $GITHUB_ENV
           echo "LOCAL_SHA=$LOCAL_SHA" >> $GITHUB_ENV
 
-      - name: 3. 判断上游是否更新
+      - name: 判断上游是否更新
         run: |
           if [ "$UPSTREAM_SHA" = "$LOCAL_SHA" ]; then
             echo "UPSTREAM_UPDATED=false" >> $GITHUB_ENV
@@ -38,81 +36,56 @@ jobs:
             echo "UPSTREAM_UPDATED=true" >> $GITHUB_ENV
           fi
 
-      - name: 4. 上游无更新时检查哪些文件缺失或未加密
+      - name: 上游无更新时检查缺失文件
         if: env.UPSTREAM_UPDATED == 'false'
         run: |
           cd main_repo
           NEED_UPDATE=false
 
-          # 检查 jsm.txt
-          if [ ! -f "jsm.txt" ]; then
-            echo "缺失 jsm.txt"
-            NEED_JSM=true
-            NEED_UPDATE=true
-          fi
+          [ ! -f "jsm.txt" ] && NEED_JSM=true && NEED_UPDATE=true
+          [ ! -f "fty.txt" ] && NEED_FTY=true && NEED_UPDATE=true
+          [ ! -f "xiaosa/api.txt" ] && NEED_XIAOSA=true && NEED_UPDATE=true
 
-          # 检查 fty.txt
-          if [ ! -f "fty.txt" ]; then
-            echo "缺失 fty.txt"
-            NEED_FTY=true
-            NEED_UPDATE=true
-          fi
-
-          # 检查 xiaosa/api.txt
-          if [ ! -f "xiaosa/api.txt" ]; then
-            echo "缺失 xiaosa/api.txt"
-            NEED_XIAOSA=true
-            NEED_UPDATE=true
-          fi
-
-          # 检查 tvboxtv.txt 是否已 Base64 加密
-          if ! grep -q "base64://" tvboxtv.txt; then
-            echo "tvboxtv.txt 未加密"
+          # tvbox.py 加密后的文件以 "$#" 开头
+          if ! grep -q "\$#" tvboxtv.txt; then
             NEED_TVBOXTV=true
             NEED_UPDATE=true
           fi
 
-          # 输出标记
           echo "NEED_UPDATE=$NEED_UPDATE" >> $GITHUB_ENV
-          echo "NEED_JSM=${NEED_JSM}" >> $GITHUB_ENV
-          echo "NEED_FTY=${NEED_FTY}" >> $GITHUB_ENV
-          echo "NEED_XIAOSA=${NEED_XIAOSA}" >> $GITHUB_ENV
-          echo "NEED_TVBOXTV=${NEED_TVBOXTV}" >> $GITHUB_ENV
+          echo "NEED_JSM=$NEED_JSM" >> $GITHUB_ENV
+          echo "NEED_FTY=$NEED_FTY" >> $GITHUB_ENV
+          echo "NEED_XIAOSA=$NEED_XIAOSA" >> $GITHUB_ENV
+          echo "NEED_TVBOXTV=$NEED_TVBOXTV" >> $GITHUB_ENV
 
-          # 如果全部满足 → 结束工作流
           if [ "$NEED_UPDATE" != "true" ]; then
             echo "所有文件已准备好，结束工作流"
             exit 0
           fi
 
-      - name: 5. 上游无更新时补缺的文件
+      - name: 初始化 Python（必须）
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 安装 pycryptodome（必须）
+        run: |
+          python -m pip install --upgrade pip
+          pip install pycryptodome
+
+      - name: 上游无更新时补齐缺失文件
         if: env.UPSTREAM_UPDATED == 'false'
         run: |
           cd main_repo
 
-          # 补 jsm.txt
-          if [ "$NEED_JSM" = "true" ]; then
-            python tools/tvbox.py jsm.json jsm.txt enc
-            echo "已生成 jsm.txt"
-          fi
+          [ "$NEED_JSM" = "true" ] && python tools/tvbox.py jsm.json jsm.txt enc
+          [ "$NEED_FTY" = "true" ] && python tools/tvbox.py fty.json fty.txt enc
+          [ "$NEED_XIAOSA" = "true" ] && python tools/tvbox.py xiaosa/api.json xiaosa/api.txt enc
 
-          # 补 fty.txt
-          if [ "$NEED_FTY" = "true" ]; then
-            python tools/tvbox.py fty.json fty.txt enc
-            echo "已生成 fty.txt"
-          fi
-
-          # 补 xiaosa/api.txt
-          if [ "$NEED_XIAOSA" = "true" ]; then
-            python tools/tvbox.py xiaosa/api.json xiaosa/api.txt enc
-            echo "已生成 xiaosa/api.txt"
-          fi
-
-          # 补 tvboxtv.txt（Base64 加密）
           if [ "$NEED_TVBOXTV" = "true" ]; then
             ENCODED=$(base64 -w 0 tvboxtv.txt)
             echo "base64://$ENCODED" > tvboxtv.txt
-            echo "tvboxtv.txt 已加密"
+            echo "tvboxtv.txt 已使用 Base64 加密"
           fi
 
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
@@ -121,7 +94,7 @@ jobs:
           git commit -m "补齐缺失文件（无上游更新）"
           git push
 
-      - name: 6. 拉取 upstream 最新文件（仅当上游有更新）
+      - name: 拉取 upstream（仅当上游有更新）
         if: env.UPSTREAM_UPDATED == 'true'
         uses: actions/checkout@v4
         with:
@@ -129,7 +102,7 @@ jobs:
           path: qist_repo
           fetch-depth: 1
 
-      - name: 7. 同步文件（仅当上游有更新）
+      - name: 同步文件（仅当上游有更新）
         if: env.UPSTREAM_UPDATED == 'true'
         run: |
           rsync -av \
@@ -139,7 +112,7 @@ jobs:
             --exclude='.github' \
             qist_repo/ main_repo/
 
-      - name: 8. 上游有更新时加密所有文件
+      - name: 上游有更新时加密所有文件
         if: env.UPSTREAM_UPDATED == 'true'
         run: |
           cd main_repo
@@ -149,9 +122,9 @@ jobs:
 
           ENCODED=$(base64 -w 0 tvboxtv.txt)
           echo "base64://$ENCODED" > tvboxtv.txt
-          echo "tvboxtv.txt 已加密"
+          echo "tvboxtv.txt 已使用 Base64 加密"
 
-      - name: 9. 上游有更新时提交
+      - name: 上游有更新时提交
         if: env.UPSTREAM_UPDATED == 'true'
         run: |
           cd main_repo
