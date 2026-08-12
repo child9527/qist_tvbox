@@ -95,14 +95,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install pycryptodome
 
-      - name: 9. 生成加密文件（无论上游是否更新，只要缺失就生成）
+      - name: 9. 生成加密文件（同步时执行）
+        if: env.UPSTREAM_UPDATED == 'true'
         run: |
           cd main_repo
-          if [ -f "tools/tvbox.py" ]; then
-            [ -f "jsm.json" ] && python tools/tvbox.py jsm.json jsm.txt enc || true
-            [ -f "fty.json" ] && python tools/tvbox.py fty.json fty.txt enc || true
-            [ -f "xiaosa/api.json" ] && python tools/tvbox.py xiaosa/api.json xiaosa/api.txt enc || true
-          fi
+
+          # 加密 jsm/fty/xiaosa
+          python tools/tvbox.py jsm.json jsm.txt enc || true
+          python tools/tvbox.py fty.json fty.txt enc || true
+          python tools/tvbox.py xiaosa/api.json xiaosa/api.txt enc || true
+
+          # 加密 tvboxtv.txt（覆盖原文件）
+          python tools/tvbox.py tvboxtv.txt tvboxtv.txt enc
+          echo "tvboxtv.txt 已加密并覆盖原文件"
+
 
       - name: 10. 提交（仅当上游有更新）
         if: env.UPSTREAM_UPDATED == 'true'
