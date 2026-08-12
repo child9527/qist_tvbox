@@ -26,25 +26,56 @@ jobs:
 
       - name: 2. 获取 upstream 最新 commit 信息（不拉历史）
         run: |
-          API_JSON=$(curl -s https://api.github.com/repos/qist/tvbox/commits/main)
-          UPSTREAM_COMMIT=$(echo "$API_JSON" | jq -r '.commit.message')
-          # 尝试获取 committer.date 或 author.date
-          RAW_TIME=$(echo "$API_JSON" | jq -r '.commit.committer.date // .commit.author.date')
-          # 如果 RAW_TIME 是 null 或空字符串，则使用当前时间
-          if [ "$RAW_TIME" = "null" ] || [ -z "$RAW_TIME" ]; then
-            RAW_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          fi
-          echo "UPSTREAM_COMMIT=$UPSTREAM_COMMIT" >> $GITHUB_ENV
-          echo "UPSTREAM_TIME=$RAW_TIME" >> $GITHUB_ENV
+          # 获取 upstream 最新 commit SHA
+          UPSTREAM_SHA=$(curl -s https://api.github.com/repos/qist/tvbox/commits/main | jq -r '.sha')
 
-      - name: 3. 拉取 upstream 最新文件（轻量）
+          # 获取当前仓库最新 commit SHA
+          cd main_repo
+          LOCAL_SHA=$(git rev-parse HEAD)
+
+          echo "UPSTREAM_SHA=$UPSTREAM_SHA" >> $GITHUB_ENV
+          echo "LOCAL_SHA=$LOCAL_SHA" >> $GITHUB_ENV
+
+      - name: 3. 判断 upstream 是否更新
+        run: |
+          echo "Upstream SHA: $UPSTREAM_SHA"
+          echo "Local SHA:    $LOCAL_SHA"
+
+          if [ "$UPSTREAM_SHA" = "$LOCAL_SHA" ]; then
+            echo "上游无更新，进入文件检查逻辑"
+            echo "UPSTREAM_UPDATED=false" >> $GITHUB_ENV
+          else
+            echo "上游有更新，需要同步"
+            echo "UPSTREAM_UPDATED=true" >> $GITHUB_ENV
+          fi
+
+      - name: 4. 如果上游无更新，检查加密文件是否存在
+        if: env.UPSTREAM_UPDATED == 'false'
+        run: |
+          cd main_repo
+          MISS=false
+
+          [ -f "jsm.txt" ] || MISS=true
+          [ -f "fty.txt" ] || MISS=true
+          [ -f "xiaosa/api.txt" ] || MISS=true
+
+          if [ "$MISS" = "false" ]; then
+            echo "加密文件已存在，无需生成，结束工作流"
+            exit 0
+          else
+            echo "加密文件缺失，需要生成"
+          fi
+
+      - name: 5. 拉取 upstream 最新文件（仅当上游有更新）
+        if: env.UPSTREAM_UPDATED == 'true'
         uses: actions/checkout@v4
         with:
           repository: 'qist/tvbox'
           path: qist_repo
           fetch-depth: 1
 
-      - name: 4. 同步文件（镜像）
+      - name: 6. 同步文件（仅当上游有更新）
+        if: env.UPSTREAM_UPDATED == 'true'
         run: |
           rsync -av \
             --delete \
@@ -54,40 +85,27 @@ jobs:
             --exclude='tools/tvbox.py' \
             qist_repo/ main_repo/
 
-      - name: 5. 初始化 Python 运行环境
+      - name: 7. 初始化 Python 运行环境
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 6. 安装官方依赖库
+      - name: 8. 安装官方依赖库
         run: |
           python -m pip install --upgrade pip
           pip install pycryptodome
 
-      - name: 6.1 预处理 json 文件格式（统一为 indent=2）
+      - name: 9. 生成加密文件（无论上游是否更新，只要缺失就生成）
         run: |
           cd main_repo
-          python -c "
-          import json, os
-          for filename in ['jsm.json', 'fty.json', 'xiaosa/api.json']:
-              if os.path.exists(filename):
-                  with open(filename, 'r', encoding='utf-8') as f:
-                      data = json.load(f)
-                  with open(filename, 'w', encoding='utf-8') as f:
-                      json.dump(data, f, ensure_ascii=False, indent=2)
-          "
-
-      - name: 7. 额外生成加密副本 xxx.txt 
-        run: |
-          cd main_repo
-          # 对最终合成好的完整 json 文件进行加密生成 .txt 副本
           if [ -f "tools/tvbox.py" ]; then
             [ -f "jsm.json" ] && python tools/tvbox.py jsm.json jsm.txt enc || true
             [ -f "fty.json" ] && python tools/tvbox.py fty.json fty.txt enc || true
             [ -f "xiaosa/api.json" ] && python tools/tvbox.py xiaosa/api.json xiaosa/api.txt enc || true
           fi
 
-      - name: 8. 使用 upstream 的 commit 信息提交（伪造 upstream 提交）
+      - name: 10. 提交（仅当上游有更新）
+        if: env.UPSTREAM_UPDATED == 'true'
         run: |
           cd main_repo
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
@@ -98,6 +116,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "无更新，跳过提交"
           else
-            git commit -m "$UPSTREAM_COMMIT"
+            git commit -m "同步上游：$UPSTREAM_SHA"
             git push
           fi
