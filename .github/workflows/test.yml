@@ -1,4 +1,4 @@
-name: 下载 one.json 解密并重新加密对比
+name: mtv6.txt加密为mtv6.json
 
 on:
   workflow_dispatch:
@@ -24,9 +24,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install pycryptodome
 
-      - name: 4. 下载远程 one.json 并执行加解密流程
+      - name: 4. 下载远程 mtv6.txt 并执行加解密流程
         run: |
-          # 1. 从远程网盘下载 one.json 到仓库根目录
+          # 1. 从远程网盘下载 mtv6.txt 到仓库根目录
           echo "正在从 https://d.kstore.dev/download/2843/mtv6.txt 下载目标文件..."
           curl -sSL "https://d.kstore.dev/download/2843/mtv6.txt" -o "mtv6.txt"
 
