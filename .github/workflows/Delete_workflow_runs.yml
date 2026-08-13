@@ -1,4 +1,4 @@
-name: Delete old workflow runs
+name: 删除工作流运行日志
 on:
   schedule:
     # 每月 1 号和 16 号运行（约 15 天一次）
