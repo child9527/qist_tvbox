@@ -30,8 +30,8 @@ jobs:
           echo "正在从 https://d.kstore.dev/download/2843/mtv6.txt 下载目标文件..."
           curl -sSL "https://d.kstore.dev/download/2843/mtv6.txt" -o "mtv6.txt"
 
-          if [ ! -f "one.json" ]; then
-            echo "错误: 下载 one.json 失败！"
+          if [ ! -f "mtv6.txt" ]; then
+            echo "错误: 下载 mtv6.txt 失败！"
             exit 1
           fi
 
